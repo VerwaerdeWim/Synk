@@ -1,0 +1,6 @@
+apiVersion: synk.io/v1alpha1
+kind: SynkSource
+metadata:
+  name: synksource-sample
+spec:
+  # TODO(user): Add fields here

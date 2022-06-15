@@ -1,0 +1,20 @@
+# permissions for end users to view synksources.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: synksource-viewer-role
+rules:
+- apiGroups:
+  - synk.io
+  resources:
+  - synksources
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - synk.io
+  resources:
+  - synksources/status
+  verbs:
+  - get
