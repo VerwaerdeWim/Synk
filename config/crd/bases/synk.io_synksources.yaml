@@ -35,6 +35,15 @@ spec:
           spec:
             description: SynkSourceSpec defines the desired state of SynkSource
             properties:
+              connection:
+                properties:
+                  bearerToken:
+                    type: string
+                  caData:
+                    type: string
+                  host:
+                    type: string
+                type: object
               resources:
                 items:
                   properties:

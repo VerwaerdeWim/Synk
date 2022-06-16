@@ -29,6 +29,8 @@ type SynkSourceSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	Resources []Resource `json:"resources"`
+	//+optional
+	Connection *Connection `json:"connection"`
 }
 
 // SynkSourceStatus defines the observed state of SynkSource
@@ -44,6 +46,15 @@ type Resource struct {
 	Namespace    string `json:"namespace"`
 	//+optional
 	Names []string `json:"names"`
+}
+
+type Connection struct {
+	//+optional
+	Host string `json:"host"`
+	//+optional
+	CAData string `json:"caData"`
+	//+optional
+	BearerToken string `json:"bearerToken"`
 }
 
 //+kubebuilder:object:root=true
