@@ -1,0 +1,20 @@
+# permissions for end users to view synktargets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: synktarget-viewer-role
+rules:
+- apiGroups:
+  - synk.io
+  resources:
+  - synktargets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - synk.io
+  resources:
+  - synktargets/status
+  verbs:
+  - get

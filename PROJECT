@@ -16,4 +16,13 @@ resources:
   kind: SynkSource
   path: github.com/VerwaerdeWim/Synk/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: synk
+  kind: SynkTarget
+  path: github.com/VerwaerdeWim/Synk/api/v1alpha1
+  version: v1alpha1
 version: "3"

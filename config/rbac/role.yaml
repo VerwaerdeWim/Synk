@@ -31,3 +31,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - synk.io
+  resources:
+  - synktargets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - synk.io
+  resources:
+  - synktargets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - synk.io
+  resources:
+  - synktargets/status
+  verbs:
+  - get
+  - patch
+  - update

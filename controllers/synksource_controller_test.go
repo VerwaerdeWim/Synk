@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controllers_test
 
 import (
 	"context"
@@ -46,18 +46,17 @@ var _ = Describe("SynkSource controller", func() {
 		interval                = time.Millisecond * 250
 	)
 
-	var (
-		createdSynkSource *synkv1alpha1.SynkSource = &synkv1alpha1.SynkSource{}
-		role              *rbacv1.Role             = &rbacv1.Role{}
-		role2             *rbacv1.Role             = &rbacv1.Role{}
-		roleBinding       *rbacv1.RoleBinding      = &rbacv1.RoleBinding{}
-		roleBinding2      *rbacv1.RoleBinding      = &rbacv1.RoleBinding{}
-		secret            *corev1.Secret           = &corev1.Secret{}
-		sa                *corev1.ServiceAccount   = &corev1.ServiceAccount{}
-	)
-
 	Context("SynkSource actions", func() {
 		ctx := context.Background()
+		var (
+			createdSynkSource *synkv1alpha1.SynkSource = &synkv1alpha1.SynkSource{}
+			role              *rbacv1.Role             = &rbacv1.Role{}
+			role2             *rbacv1.Role             = &rbacv1.Role{}
+			roleBinding       *rbacv1.RoleBinding      = &rbacv1.RoleBinding{}
+			roleBinding2      *rbacv1.RoleBinding      = &rbacv1.RoleBinding{}
+			secret            *corev1.Secret           = &corev1.Secret{}
+			sa                *corev1.ServiceAccount   = &corev1.ServiceAccount{}
+		)
 
 		Context("SynkSource creation", func() {
 			It("Should create a SynkSource resource", func() {

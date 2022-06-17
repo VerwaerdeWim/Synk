@@ -1,0 +1,24 @@
+# permissions for end users to edit synktargets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: synktarget-editor-role
+rules:
+- apiGroups:
+  - synk.io
+  resources:
+  - synktargets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - synk.io
+  resources:
+  - synktargets/status
+  verbs:
+  - get

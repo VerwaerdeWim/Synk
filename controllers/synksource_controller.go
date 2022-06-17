@@ -41,7 +41,6 @@ const synkSourceFinalizer = "synksource.synk.io/finalizer"
 var (
 	synkSourceLog = ctrl.Log.WithName("SynkSource controller")
 	roles         = make(map[string]*rbacv1.Role)
-	roleBindings  = make(map[string]*rbacv1.RoleBinding)
 )
 
 // SynkSourceReconciler reconciles a SynkSource object
@@ -177,7 +176,6 @@ func (r *SynkSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 		roles = newRoles
-		roleBindings = newRoleBindings
 
 		if len(rolesToRemove) > 0 {
 			for _, ns := range rolesToRemove {
@@ -404,12 +402,12 @@ func (r *SynkSourceReconciler) finalizeSynkSource(ctx context.Context, synkSourc
 func (r *SynkSourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&synkv1alpha1.SynkSource{}).
-		WithEventFilter(predicateFilter()).
+		WithEventFilter(predicateFilterSynkSource()).
 		Complete(r)
 }
 
 // Return true to pass it to the reconciler. False will skip the event and it won't be reconciled
-func predicateFilter() predicate.Predicate {
+func predicateFilterSynkSource() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			synkSourceLog.Info("CreatePredicatefilter")
