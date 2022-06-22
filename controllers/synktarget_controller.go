@@ -45,6 +45,7 @@ import (
 type SynkTargetReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Config *rest.Config
 }
 
 var (
@@ -84,7 +85,7 @@ func (r *SynkTargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	connection := &synkTarget.Spec.Connection
+	connection := synkTarget.Spec.Connection
 
 	// remoteResource := synkTarget.Spec.RemoteResource
 	// controllerLog.Info("Synk", "Connection", connection.Host, "RemoteResource", remoteResource)
@@ -190,7 +191,7 @@ func (r *SynkTargetReconciler) watchResource(ctx context.Context, resource *synk
 	// 1. Connect with remote resource
 	// 2. Connect with local resource
 	// 2. Watch events from remote resource
-	homeClient, err := dynamic.NewForConfig(ctrl.GetConfigOrDie())
+	homeClient, err := dynamic.NewForConfig(r.Config)
 	if err != nil {
 		controllerLog.Error(err, "Unable to setup local dynamic client")
 		return
@@ -204,7 +205,7 @@ func (r *SynkTargetReconciler) watchResource(ctx context.Context, resource *synk
 			// r.patchCondition(ctx, synk, "Connected", metav1.ConditionTrue, "Connected with remote cluster", "Connected")
 		}
 		if och == nil {
-			och = r.initWatch(ctx, resource, name, ctrl.GetConfigOrDie())
+			och = r.initWatch(ctx, resource, name, r.Config)
 		}
 		select {
 		case <-ctx.Done():

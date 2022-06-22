@@ -10,5 +10,3 @@ spec:
     namespace: "test"
     names: 
     - "test1"
-    - "test2"
-  # TODO(user): Add fields here

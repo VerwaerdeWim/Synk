@@ -105,11 +105,11 @@ var _ = Describe("SynkSource controller", func() {
 					},
 				}
 				By("Creating the SynkSource")
-				Expect(k8sClient.Create(ctx, synkSource)).Should(Succeed())
+				Expect(k8sClient1.Create(ctx, synkSource)).Should(Succeed())
 
 				By("Checking if the created SynkSource exists")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, createdSynkSource)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, createdSynkSource)
 					return err == nil
 				}, timeout, interval).Should(BeTrue())
 			})
@@ -117,24 +117,23 @@ var _ = Describe("SynkSource controller", func() {
 			It("Should create a Service account", func() {
 				By("Checking if the service account exists")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, sa)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, sa)
 					return err == nil
 				}, timeout, interval).Should(BeTrue())
 			})
 
 			It("Should create a Secret for the service account", func() {
 				By("Checking if the secret exists")
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, secret)
-					return err == nil
-				}, timeout, interval).Should(BeTrue())
+				Eventually(func() int {
+					_ = k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, secret)
+					return len(secret.ObjectMeta.Annotations)
+				}, timeout, interval).Should(Equal(2))
 
 				By("Checking if the type is correct")
 				Expect(secret.Type).Should(Equal(corev1.SecretTypeServiceAccountToken))
 
 				By("Checking if the service account is correctly linked to the secret")
 				Expect(secret.ObjectMeta.Annotations["kubernetes.io/service-account.name"]).Should(Equal(TestSynkSourceName))
-				Expect(len(secret.ObjectMeta.Annotations)).Should(Equal(2))
 
 				By("Checking if the secret contains the generated data")
 				Expect(len(secret.Data)).Should(Equal(3))
@@ -143,11 +142,11 @@ var _ = Describe("SynkSource controller", func() {
 			It("Should create Roles", func() {
 				By("Checking if the roles exist")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace}, role)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace}, role)
 					return err == nil
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace2}, role2)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace2}, role2)
 					return err == nil
 				}, timeout, interval).Should(BeTrue())
 
@@ -185,11 +184,11 @@ var _ = Describe("SynkSource controller", func() {
 			It("Should create Rolebindings", func() {
 				By("Checking if the rolebindings exist")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace}, roleBinding)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace}, roleBinding)
 					return err == nil
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace2}, roleBinding2)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace2}, roleBinding2)
 					return err == nil
 				}, timeout, interval).Should(BeTrue())
 
@@ -218,7 +217,7 @@ var _ = Describe("SynkSource controller", func() {
 			It("Should add connection parameters to the SynkSource", func() {
 				By("Checking if the connection is not nil")
 				Eventually(func() *synkv1alpha1.Connection {
-					_ = k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, createdSynkSource)
+					_ = k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, createdSynkSource)
 					return createdSynkSource.Spec.Connection
 				}, timeout, interval).ShouldNot(BeNil())
 			})
@@ -237,7 +236,7 @@ var _ = Describe("SynkSource controller", func() {
 						TestSecretName,
 					},
 				}}...)
-				Expect(k8sClient.Update(ctx, createdSynkSource)).Should(Succeed())
+				Expect(k8sClient1.Update(ctx, createdSynkSource)).Should(Succeed())
 			})
 
 			var role3 *rbacv1.Role = &rbacv1.Role{}
@@ -245,17 +244,17 @@ var _ = Describe("SynkSource controller", func() {
 			It("Should update the roles", func() {
 				By("Checking if the amount of resource names has changed correctly")
 				Eventually(func() int {
-					_ = k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace}, role)
+					_ = k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestConfigMapNamespace}, role)
 					return len(role.Rules[0].ResourceNames)
 				}, timeout, interval).Should(Equal(2))
 
 				By("Checking if a role and rolebinding are created")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSecretNamespace2}, role3)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSecretNamespace2}, role3)
 					return err == nil
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSecretNamespace2}, roleBinding3)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSecretNamespace2}, roleBinding3)
 					return err == nil
 				}, timeout, interval).Should(BeTrue())
 
@@ -267,15 +266,15 @@ var _ = Describe("SynkSource controller", func() {
 			It("Should update again to remove role3 and rolebinding3", func() {
 				By("Updating the synksource")
 				createdSynkSource.Spec.Resources = createdSynkSource.Spec.Resources[:len(createdSynkSource.Spec.Resources)-1]
-				Expect(k8sClient.Update(ctx, createdSynkSource)).Should(Succeed())
+				Expect(k8sClient1.Update(ctx, createdSynkSource)).Should(Succeed())
 
 				By("Checking if the role and rolebinding not exist anymore")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSecretNamespace2}, role3)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSecretNamespace2}, role3)
 					return err == nil
 				}, timeout, interval).Should(BeFalse())
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSecretNamespace2}, roleBinding3)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSecretNamespace2}, roleBinding3)
 					return err == nil
 				}, timeout, interval).Should(BeFalse())
 			})
@@ -284,11 +283,11 @@ var _ = Describe("SynkSource controller", func() {
 		Context("SynkSource deletion", func() {
 			It("Should delete the SynkSource resource", func() {
 				By("Deleting the SynkSource")
-				Expect(k8sClient.Delete(ctx, createdSynkSource)).Should(Succeed())
+				Expect(k8sClient1.Delete(ctx, createdSynkSource)).Should(Succeed())
 
 				By("Checking if the SynkSource is deleted")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, createdSynkSource)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, createdSynkSource)
 					return err == nil
 				}, timeout, interval).Should(BeFalse())
 			})
@@ -297,13 +296,13 @@ var _ = Describe("SynkSource controller", func() {
 				By("Checking if the rolebindings not exist anymore")
 				Eventually(func() bool {
 					roleBindingName := TestSynkSourceName
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: roleBindingName, Namespace: TestConfigMapNamespace}, roleBinding)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: roleBindingName, Namespace: TestConfigMapNamespace}, roleBinding)
 					return err == nil
 				}, timeout, interval).Should(BeFalse())
 
 				Eventually(func() bool {
 					roleBindingName := TestSynkSourceName
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: roleBindingName, Namespace: TestConfigMapNamespace}, roleBinding2)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: roleBindingName, Namespace: TestConfigMapNamespace}, roleBinding2)
 					return err == nil
 				}, timeout, interval).Should(BeFalse())
 			})
@@ -312,13 +311,13 @@ var _ = Describe("SynkSource controller", func() {
 				By("Checking if the roles not exist anymore")
 				Eventually(func() bool {
 					roleName := TestSynkSourceName
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: roleName, Namespace: TestConfigMapNamespace}, role)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: roleName, Namespace: TestConfigMapNamespace}, role)
 					return err == nil
 				}, timeout, interval).Should(BeFalse())
 
 				Eventually(func() bool {
 					roleName := TestSynkSourceName
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: roleName, Namespace: TestConfigMapNamespace2}, role2)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: roleName, Namespace: TestConfigMapNamespace2}, role2)
 					return err == nil
 				}, timeout, interval).Should(BeFalse())
 			})
@@ -326,7 +325,7 @@ var _ = Describe("SynkSource controller", func() {
 			It("Should delete the secret", func() {
 				By("Checking if the secret not exist anymore")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, secret)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, secret)
 					return err == nil
 				}, timeout, interval).Should(BeFalse())
 			})
@@ -334,7 +333,7 @@ var _ = Describe("SynkSource controller", func() {
 			It("Should delete the service account", func() {
 				By("Chekcing if the service account not exists anymore")
 				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, sa)
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName, Namespace: TestSynkSourceNamespace}, sa)
 					return err == nil
 				}, timeout, interval).Should(BeFalse())
 			})

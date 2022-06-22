@@ -28,7 +28,7 @@ type SynkTargetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Connection Connection `json:"connection"`
+	Connection *Connection `json:"connection"`
 
 	Resources []Resource `json:"resources"`
 }

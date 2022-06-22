@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"encoding/base64"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -26,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -47,6 +49,7 @@ var (
 type SynkSourceReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Config *rest.Config
 }
 
 //+kubebuilder:rbac:groups=synk.io,resources=synksources,verbs=get;list;watch;create;update;patch;delete
@@ -336,16 +339,18 @@ func (r *SynkSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	err = r.Get(ctx, types.NamespacedName{Name: synkSource.Name, Namespace: synkSource.Namespace}, secret)
-	if err != nil {
-		synkSourceLog.Info("Could not get the secret")
+	// TODO: fix
+	t := 0
+	for r.Get(ctx, types.NamespacedName{Name: synkSource.Name, Namespace: synkSource.Namespace}, secret); secret.Data == nil && t < 5; t++ {
+		time.Sleep(time.Millisecond * 10)
+		synkSourceLog.Info("check if secret is made")
 	}
 
 	if secret.Data == nil {
-		synkSourceLog.Info("Secret contains no data")
+		synkSourceLog.Info("Secret contains no data", "secret", secret)
 	} else {
 		synkSource.Spec.Connection = &synkv1alpha1.Connection{
-			Host:        ctrl.GetConfigOrDie().Host,
+			Host:        r.Config.Host,
 			BearerToken: base64.StdEncoding.EncodeToString(secret.Data["token"]),
 			CAData:      base64.StdEncoding.EncodeToString(secret.Data["ca.crt"]),
 		}
