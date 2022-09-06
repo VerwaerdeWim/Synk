@@ -92,12 +92,23 @@ func createSynkTarget(client client.Client, name string, ns string, synkSource *
 	return createdSynkTarget
 }
 
-var _ = Describe("SynkSource controller", func() {
+func deleteSynkSource(client client.Client, synkSource *synkv1alpha1.SynkSource) {
+	By("Synksource deletion")
+	Expect(client.Delete(ctx, synkSource)).Should(Succeed())
+
+	By("Checking if the synksource is deleted")
+	Eventually(func() bool {
+		err := client.Get(ctx, types.NamespacedName{Name: synkSource.Name, Namespace: synkSource.Namespace}, synkSource)
+		return err == nil
+	}, timeout, interval).Should(BeFalse())
+}
+
+var _ = Describe("SynkTarget controller", func() {
 	Context("SynkTarget actions", func() {
 		Context("SynkTarget create", func() {
 			It("Create synksource first", func() {
 				By("Checking if sync works")
-				createdConfigMap := createConfigMap(k8sClient2, "test-target-configmap", "test", map[string]string{"hello": "world"})
+				// createdConfigMap := createConfigMap(k8sClient2, "test-target-configmap", "test", map[string]string{"hello": "world"})
 
 				createdSynkSource := createSynkSource(k8sClient2, "test-target", "test", []synkv1alpha1.Resource{
 					{
@@ -111,35 +122,75 @@ var _ = Describe("SynkSource controller", func() {
 					},
 				})
 
-				_ = createSynkTarget(k8sClient1, "test-target", "test", createdSynkSource)
+				// createdSynkTarget := createSynkTarget(k8sClient1, "test-target", "test", createdSynkSource)
 
-				By("Checking if the configmap is duplicated")
-				createdConfigMap2 := &corev1.ConfigMap{}
-				Eventually(func() bool {
-					err := k8sClient1.Get(ctx, types.NamespacedName{Name: "test-target-configmap", Namespace: "test"}, createdConfigMap2)
-					return err == nil
-				}, timeout, interval).Should(BeTrue())
+				// By("Checking if the configmap is duplicated")
+				// createdConfigMap2 := &corev1.ConfigMap{}
+				// Eventually(func() bool {
+				// 	err := k8sClient1.Get(ctx, types.NamespacedName{Name: "test-target-configmap", Namespace: "test"}, createdConfigMap2)
+				// 	return err == nil
+				// }, timeout, interval).Should(BeTrue())
 
-				By("Checking if the configmap contains the right data")
-				Expect(createdConfigMap2.Data).Should(Equal(createdConfigMap.Data))
+				// By("Checking if the configmap contains the right data")
+				// Expect(createdConfigMap2.Data).Should(Equal(createdConfigMap.Data))
 
-				By("Updating the configmap")
-				createdConfigMap.Data["test"] = "test"
-				Expect(k8sClient2.Update(ctx, createdConfigMap)).Should(Succeed())
+				// By("Updating the configmap")
+				// createdConfigMap.Data["test"] = "test"
+				// Expect(k8sClient2.Update(ctx, createdConfigMap)).Should(Succeed())
 
-				Eventually(func() map[string]string {
-					_ = k8sClient1.Get(ctx, types.NamespacedName{Name: "test-target-configmap", Namespace: "test"}, createdConfigMap2)
-					return createdConfigMap2.Data
-				}, timeout, interval).Should(Equal(createdConfigMap.Data))
+				// Eventually(func() map[string]string {
+				// 	_ = k8sClient1.Get(ctx, types.NamespacedName{Name: "test-target-configmap", Namespace: "test"}, createdConfigMap2)
+				// 	return createdConfigMap2.Data
+				// }, timeout, interval).Should(Equal(createdConfigMap.Data))
 
-				By("Synksource deletion")
-				Expect(k8sClient2.Delete(ctx, createdSynkSource)).Should(Succeed())
+				// By("Creating another configmap")
+				// createdConfigMap3 := createConfigMap(k8sClient2, "test-target-configmap2", "test", map[string]string{"hello": "world2"})
 
-				By("Checking if the synksource is deleted")
-				Eventually(func() bool {
-					err := k8sClient2.Get(ctx, types.NamespacedName{Name: "test-target", Namespace: "test"}, createdSynkSource)
-					return err == nil
-				}, timeout, interval).Should(BeFalse())
+				// By("Updating the synksource")
+
+				// createdSynkSource.Spec.Resources[0].Names = append(createdSynkSource.Spec.Resources[0].Names, createdConfigMap3.Name)
+
+				// Expect(k8sClient2.Update(ctx, createdSynkSource)).Should(Succeed())
+
+				// By("Updating the synktarget")
+				// createdSynkTarget.Spec.Resources[0].Names = createdSynkSource.Spec.Resources[0].Names
+				// Expect(k8sClient1.Update(ctx, createdSynkTarget)).Should(Succeed())
+
+				// By("Checking if the configmap is duplicated")
+				// createdConfigMap4 := &corev1.ConfigMap{}
+				// Eventually(func() bool {
+				// 	err := k8sClient1.Get(ctx, types.NamespacedName{Name: "test-target-configmap2", Namespace: "test"}, createdConfigMap4)
+				// 	return err == nil
+				// }, timeout, interval).Should(BeTrue())
+
+				By("testing alle resources of a certain type")
+				createdSynkSource2 := createSynkSource(k8sClient2, "test-target2", "test", []synkv1alpha1.Resource{
+					{
+						Group:        "",
+						Version:      "v1",
+						ResourceType: "configmaps",
+						Namespace:    "test2",
+					},
+				})
+
+				// createdConfigMap5 := createConfigMap(k8sClient2, "test-target-configmap", "test2", map[string]string{"hello": "world"})
+				// createdConfigMap6 := createConfigMap(k8sClient2, "test-target-configmap2", "test2", map[string]string{"hello": "world2"})
+
+				// _ = createSynkTarget(k8sClient1, "test-target2", "test", createdSynkSource2)
+				// By("Checking if the configmap is duplicated")
+				// createdConfigMap7 := &corev1.ConfigMap{}
+				// Eventually(func() bool {
+				// 	err := k8sClient1.Get(ctx, types.NamespacedName{Name: createdConfigMap5.Name, Namespace: "test2"}, createdConfigMap7)
+				// 	return err == nil
+				// }, timeout, interval).Should(BeTrue())
+				// createdConfigMap8 := &corev1.ConfigMap{}
+				// Eventually(func() bool {
+				// 	err := k8sClient1.Get(ctx, types.NamespacedName{Name: createdConfigMap6.Name, Namespace: "test2"}, createdConfigMap8)
+				// 	return err == nil
+				// }, timeout, interval).Should(BeTrue())
+
+				deleteSynkSource(k8sClient2, createdSynkSource)
+				deleteSynkSource(k8sClient2, createdSynkSource2)
 			})
 		})
 	})

@@ -342,7 +342,7 @@ func (r *SynkSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// TODO: fix
 	t := 0
 	for r.Get(ctx, types.NamespacedName{Name: synkSource.Name, Namespace: synkSource.Namespace}, secret); secret.Data == nil && t < 5; t++ {
-		time.Sleep(time.Millisecond * 10)
+		time.Sleep(time.Millisecond * 100)
 		synkSourceLog.Info("check if secret is made")
 	}
 

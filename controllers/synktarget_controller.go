@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -51,6 +53,7 @@ type SynkTargetReconciler struct {
 var (
 	controllerLog = ctrl.Log.WithName("synk controller")
 	cancel        = make(map[string]context.CancelFunc)
+	mu            sync.Mutex
 )
 
 //+kubebuilder:rbac:groups=synk.io,resources=synktargets,verbs=get;list;watch;create;update;patch;delete
@@ -70,7 +73,7 @@ func (r *SynkTargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	_ = log.FromContext(ctx)
 
 	// TODO(user): your logic here
-	controllerLog.Info("Reconcile")
+	controllerLog.V(10).Info("Reconcile")
 
 	synkTarget := &synkv1alpha1.SynkTarget{}
 	err := r.Get(ctx, req.NamespacedName, synkTarget)
@@ -121,9 +124,11 @@ func (r *SynkTargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	for index := range synkTarget.Spec.Resources {
 		if synkTarget.Spec.Resources[index].Names != nil {
 			for _, name := range synkTarget.Spec.Resources[index].Names {
-				c, cancelfunc := context.WithCancel(ctx)
-				cancel[getKey(config.Host, &synkTarget.Spec.Resources[index], name)] = cancelfunc
-				go r.watchResource(c, &synkTarget.Spec.Resources[index], name, config)
+				if cancel[getKey(config.Host, &synkTarget.Spec.Resources[index], name)] == nil {
+					c, cancelfunc := context.WithCancel(ctx)
+					cancel[getKey(config.Host, &synkTarget.Spec.Resources[index], name)] = cancelfunc
+					go r.watchResource(c, &synkTarget.Spec.Resources[index], name, config)
+				}
 			}
 		} else {
 			c, cancelfunc := context.WithCancel(ctx)
@@ -145,7 +150,7 @@ func (r *SynkTargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *SynkTargetReconciler) initWatch(ctx context.Context, resource *synkv1alpha1.Resource, name string, config *rest.Config) <-chan watch.Event {
-	controllerLog.Info("trying to connect", "Host", config.Host, "Name", name)
+	controllerLog.V(10).Info("trying to connect", "Host", config.Host, "Name", name)
 	client, err := dynamic.NewForConfig(config)
 	if err != nil {
 		controllerLog.Error(err, "Creation dynamic client failed.")
@@ -197,29 +202,33 @@ func (r *SynkTargetReconciler) watchResource(ctx context.Context, resource *synk
 		return
 	}
 	var rch <-chan watch.Event
-	var och <-chan watch.Event
+	// var och <-chan watch.Event
 	for {
 		if rch == nil {
 			rch = r.initWatch(ctx, resource, name, config)
 
 			// r.patchCondition(ctx, synk, "Connected", metav1.ConditionTrue, "Connected with remote cluster", "Connected")
 		}
-		if och == nil {
-			och = r.initWatch(ctx, resource, name, r.Config)
-		}
+		// if och == nil {
+		// 	och = r.initWatch(ctx, resource, name, r.Config)
+		// }
 		select {
 		case <-ctx.Done():
 			delete(cancel, getKey(config.Host, resource, name))
 			controllerLog.Info("Exit goroutine", "name", getKey(config.Host, resource, name))
 			return
 		case event, ok := <-rch:
-			controllerLog.Info("Remote resource event", "event", event.Type, "timestamp", time.Now().UTC().Format(time.RFC3339Nano))
+			controllerLog.V(10).Info("Remote resource event", "event", event.Type, "timestamp", time.Now().UTC().Format(time.RFC3339Nano))
+
+			// change detected
+			t3 := time.Now().UTC()
+
 			if !ok && cancel[getKey(config.Host, resource, name)] == nil {
 				controllerLog.Info("Unknown error")
 				return
 			}
 			if event.Type == watch.Deleted {
-				controllerLog.Info("Remote resource deleted")
+				controllerLog.V(10).Info("Remote resource deleted")
 				// r.patchCondition(ctx, synk, "RemoteResourceFound", metav1.ConditionFalse, "Remote resource deleted", "ResourceDeleted")
 				continue
 			}
@@ -263,25 +272,25 @@ func (r *SynkTargetReconciler) watchResource(ctx context.Context, resource *synk
 						"name":      name,
 						"namespace": resource.Namespace,
 						"annotations": map[string]interface{}{
-							"synk-last-sync":          time.Now().UTC().Format(time.RFC3339Nano),
+							"synk-last-sync":          t3,
 							"synk-last-remote-update": remoteCr.GetAnnotations()["synk-last-update"],
+							"updatenr":                remoteCr.GetAnnotations()["updatenr"],
 						},
 					},
 					"data": remoteCrSpec,
 				})
 
-				createdResource, err := homeClient.Resource(schema.GroupVersionResource{
+				_, err := homeClient.Resource(schema.GroupVersionResource{
 					Group:    resource.Group,
 					Version:  resource.Version,
 					Resource: resource.ResourceType,
 				}).Namespace(resource.Namespace).Create(ctx, ownCr, metav1.CreateOptions{})
-
-				controllerLog.Info("Remote resource updated", "timestamp", createdResource.GetAnnotations()["synk-last-remote-update"])
-				controllerLog.Info("Own resource updated", "timestamp", createdResource.GetAnnotations()["synk-last-sync"])
-
+				// controllerLog.V(10).Info("Remote resource updated", "timestamp", createdResource.GetAnnotations()["synk-last-remote-update"])
+				// controllerLog.V(10).Info("Own resource updated", "timestamp", createdResource.GetAnnotations()["synk-last-sync"])
 				if err != nil {
 					controllerLog.Info("creation own resource failed", "err", err)
 				}
+
 				// r.patchCondition(ctx, synk, "OwnResourceFound", metav1.ConditionTrue, "Own resource created", "ResourceCreated")
 			} else {
 
@@ -303,54 +312,95 @@ func (r *SynkTargetReconciler) watchResource(ctx context.Context, resource *synk
 				}
 
 				if string(ownCrJSON) != string(remoteCrJSON) {
-					patch := []interface{}{
-						map[string]interface{}{
-							"op":    "replace",
-							"path":  "/data",
-							"value": remoteCrSpec,
-						},
-						map[string]interface{}{
-							"op":    "replace",
-							"path":  "/metadata/annotations/synk-last-sync",
-							"value": time.Now().UTC().Format(time.RFC3339Nano),
-						},
-						map[string]interface{}{
-							"op":    "replace",
-							"path":  "/metadata/annotations/synk-last-remote-update",
-							"value": remoteCr.GetAnnotations()["synk-last-update"],
-						},
-					}
-					patchPayload, err := json.Marshal(patch)
-					if err != nil {
-						controllerLog.Error(err, "Can't marshal the patch")
-					}
-
-					patchedResource, err := homeClient.Resource(schema.GroupVersionResource{
-						Group:    resource.Group,
-						Version:  resource.Version,
-						Resource: resource.ResourceType,
-					}).Namespace(resource.Namespace).Patch(ctx, name, types.JSONPatchType, patchPayload, metav1.PatchOptions{})
-					controllerLog.Info("Remote resource updated", "timestamp", patchedResource.GetAnnotations()["synk-last-remote-update"])
-					controllerLog.Info("Own resource updated", "timestamp", patchedResource.GetAnnotations()["synk-last-sync"])
-
-					if err != nil {
-						controllerLog.Error(err, "Patch ownCr failed")
-						return
-					}
 				}
+
+				// n := time.Now().UTC().Format(time.RFC3339Nano)
+				patch := []interface{}{
+					map[string]interface{}{
+						"op":    "replace",
+						"path":  "/data",
+						"value": remoteCrSpec,
+					},
+					map[string]interface{}{
+						"op":    "replace",
+						"path":  "/metadata/annotations/synk-last-sync",
+						"value": t3,
+					},
+					map[string]interface{}{
+						"op":    "replace",
+						"path":  "/metadata/annotations/synk-last-remote-update",
+						"value": remoteCr.GetAnnotations()["synk-last-update"],
+					},
+					map[string]interface{}{
+						"op":    "replace",
+						"path":  "/metadata/annotations/updatenr",
+						"value": remoteCr.GetAnnotations()["updatenr"],
+					},
+				}
+				patchPayload, err := json.Marshal(patch)
+				if err != nil {
+					controllerLog.Error(err, "Can't marshal the patch")
+				}
+
+				// request timestamp
+				t4 := time.Now().UTC()
+
+				// t6, _ := time.Parse(time.RFC3339Nano, time.Now().UTC().Format(time.RFC3339Nano))
+				// t3, _ := time.Parse(time.RFC3339Nano, n)
+				// t := t6.Sub(t3)
+				// parsedt := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d.%06d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond()/1000)
+				// controllerLog.V(10).Info("left operator at", "name", remoteCr.GetName(), "t", t)
+
+				patchedResource, err := homeClient.Resource(schema.GroupVersionResource{
+					Group:    resource.Group,
+					Version:  resource.Version,
+					Resource: resource.ResourceType,
+				}).Namespace(resource.Namespace).Patch(ctx, name, types.JSONPatchType, patchPayload, metav1.PatchOptions{})
+
+				// response timestamp
+				t5 := time.Now().UTC()
+
+				parsedt3 := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d.%06d", t3.Year(), t3.Month(), t3.Day(), t3.Hour(), t3.Minute(), t3.Second(), t3.Nanosecond()/1000)
+				parsedt4 := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d.%06d", t4.Year(), t4.Month(), t4.Day(), t4.Hour(), t4.Minute(), t4.Second(), t4.Nanosecond()/1000)
+				parsedt5 := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d.%06d", t5.Year(), t5.Month(), t5.Day(), t5.Hour(), t5.Minute(), t5.Second(), t5.Nanosecond()/1000)
+				output := fmt.Sprintf("%s %s %s %s %s", remoteCr.GetAnnotations()["updatenr"], remoteCr.GetName(), parsedt3, parsedt4, parsedt5)
+
+				controllerLog.Info("update", "timestamps", output)
+				controllerLog.V(10).Info("output updated", "timestamp", patchedResource.GetAnnotations()["synk-last-sync"])
+
+				if err != nil {
+					controllerLog.Error(err, "Patch ownCr failed")
+					return
+				}
+				// }
 			}
 
-		case event, ok := <-och:
-			controllerLog.Info("Own resource event", "event", event.Type, "timestamp", time.Now().UTC().Format(time.RFC3339Nano))
-			if !ok && cancel[getKey(config.Host, resource, name)] == nil {
-				controllerLog.Info("Unknown error")
-				return
-			}
-			if event.Type == watch.Deleted {
-				controllerLog.Info("Own resource deleted")
-				// r.patchCondition(ctx, synk, "OwnResourceFound", metav1.ConditionFalse, "Own resource deleted", "ResourceDeleted")
-				continue
-			}
+			// case event, ok := <-och:
+			// 	controllerLog.V(10).Info("Own resource event", "event", event.Type, "timestamp", time.Now().UTC().Format(time.RFC3339Nano))
+			// 	if !ok && cancel[getKey(config.Host, resource, name)] == nil {
+			// 		controllerLog.Info("Unknown error")
+			// 		return
+			// 	}
+
+			// 	if event.Type == watch.Added || event.Type == watch.Modified {
+			// 		owntime, _ := time.Parse(time.RFC3339Nano, time.Now().UTC().Format(time.RFC3339Nano))
+			// 		remotetime, _ := time.Parse(time.RFC3339Nano, event.Object.(*unstructured.Unstructured).GetAnnotations()["synk-last-remote-update"])
+			// 		changedetected, _ := time.Parse(time.RFC3339Nano, event.Object.(*unstructured.Unstructured).GetAnnotations()["synk-last-sync"])
+			// 		parsedown := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d.%06d", owntime.Year(), owntime.Month(), owntime.Day(), owntime.Hour(), owntime.Minute(), owntime.Second(), owntime.Nanosecond()/1000)
+			// 		parsedremote := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d.%06d", remotetime.Year(), remotetime.Month(), remotetime.Day(), remotetime.Hour(), remotetime.Minute(), remotetime.Second(), remotetime.Nanosecond()/1000)
+			// 		parsedchange := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d.%06d", changedetected.Year(), changedetected.Month(), changedetected.Day(), changedetected.Hour(), changedetected.Minute(), changedetected.Second(), changedetected.Nanosecond()/1000)
+			// 		// totalsynctime := owntime.Sub(remotetime)
+			// 		startandend := fmt.Sprintf("%s+%s+%s+%s", parsedremote, parsedchange, parsedown, event.Object.(*unstructured.Unstructured).GetAnnotations()["updatenr"])
+			// 		// updatechangetime := owntime.Sub(changedetected)
+
+			// 		controllerLog.Info("Creation sync", "name", event.Object.(*unstructured.Unstructured).GetName(), "type", event.Type, "start+end", startandend)
+
+			// 	}
+			// 	if event.Type == watch.Deleted {
+			// 		controllerLog.V(10).Info("Own resource deleted")
+			// 		// r.patchCondition(ctx, synk, "OwnResourceFound", metav1.ConditionFalse, "Own resource deleted", "ResourceDeleted")
+			// 		continue
+			// 	}
 		}
 	}
 }
@@ -427,7 +477,7 @@ func (r *SynkTargetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func predicateFilterSynkTarget() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			controllerLog.Info("CreatePredicatefilter")
+			controllerLog.V(10).Info("CreatePredicatefilter")
 			return true
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
@@ -442,26 +492,34 @@ func predicateFilterSynkTarget() predicate.Predicate {
 			}
 
 			// meta.Genertation does not change with status update. Ignore statusupdates
-			if synkOld.GetGeneration() == synkNew.GetGeneration() {
-				return false
-			}
+			// if synkOld.GetGeneration() == synkNew.GetGeneration() {
+			// 	return false
+			// }
 
 			// if spec field changes, the goroutine must be deleted and recreated with new params
 			for index := range synkOld.Spec.Resources {
 				if synkOld.Spec.Resources[index].Names != nil {
 					for _, name := range synkOld.Spec.Resources[index].Names {
-						cancel[getKey(synkOld.Spec.Connection.Host, &synkOld.Spec.Resources[index], name)]()
+						found := false
+						for _, namenew := range synkNew.Spec.Resources[index].Names {
+							if name == namenew {
+								found = true
+							}
+						}
+						if !found {
+							cancel[getKey(synkOld.Spec.Connection.Host, &synkOld.Spec.Resources[index], name)]()
+						}
 					}
 				} else {
 					cancel[getKey(synkOld.Spec.Connection.Host, &synkOld.Spec.Resources[index], "")]()
 				}
 			}
 
-			controllerLog.Info("UpdatePredicatefilter")
+			controllerLog.V(10).Info("UpdatePredicatefilter")
 			return true
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			controllerLog.Info("DeletePredicatefilter")
+			controllerLog.V(10).Info("DeletePredicatefilter")
 			synk, ok := e.Object.(*synkv1alpha1.SynkTarget)
 
 			if !ok {

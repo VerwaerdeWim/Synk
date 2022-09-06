@@ -36,6 +36,7 @@ var _ = Describe("SynkSource controller", func() {
 		TestConfigMapName3      = "test-configmap3"
 		TestConfigMapName4      = "test-configmap4"
 		TestSynkSourceName      = "test-synksource"
+		TestSynkSourceName2     = "test-synksource2"
 		TestSecretName          = "test-secret"
 		TestSecretNamespace     = "test"
 		TestConfigMapNamespace  = "test"
@@ -49,13 +50,14 @@ var _ = Describe("SynkSource controller", func() {
 	Context("SynkSource actions", func() {
 		ctx := context.Background()
 		var (
-			createdSynkSource *synkv1alpha1.SynkSource = &synkv1alpha1.SynkSource{}
-			role              *rbacv1.Role             = &rbacv1.Role{}
-			role2             *rbacv1.Role             = &rbacv1.Role{}
-			roleBinding       *rbacv1.RoleBinding      = &rbacv1.RoleBinding{}
-			roleBinding2      *rbacv1.RoleBinding      = &rbacv1.RoleBinding{}
-			secret            *corev1.Secret           = &corev1.Secret{}
-			sa                *corev1.ServiceAccount   = &corev1.ServiceAccount{}
+			createdSynkSource  *synkv1alpha1.SynkSource = &synkv1alpha1.SynkSource{}
+			createdSynkSource2 *synkv1alpha1.SynkSource = &synkv1alpha1.SynkSource{}
+			role               *rbacv1.Role             = &rbacv1.Role{}
+			role2              *rbacv1.Role             = &rbacv1.Role{}
+			roleBinding        *rbacv1.RoleBinding      = &rbacv1.RoleBinding{}
+			roleBinding2       *rbacv1.RoleBinding      = &rbacv1.RoleBinding{}
+			secret             *corev1.Secret           = &corev1.Secret{}
+			sa                 *corev1.ServiceAccount   = &corev1.ServiceAccount{}
 		)
 
 		Context("SynkSource creation", func() {
@@ -223,6 +225,171 @@ var _ = Describe("SynkSource controller", func() {
 			})
 		})
 
+		Context("SynkSource creation", func() {
+			It("Should create a SynkSource resource", func() {
+				synkSource := &synkv1alpha1.SynkSource{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      TestSynkSourceName2,
+						Namespace: TestSynkSourceNamespace,
+					},
+					Spec: synkv1alpha1.SynkSourceSpec{
+						Resources: []synkv1alpha1.Resource{
+							{
+								Group:        "",
+								Version:      "v1",
+								ResourceType: "configmaps",
+								Namespace:    TestConfigMapNamespace,
+								Names: []string{
+									TestConfigMapName,
+									TestConfigMapName2,
+								},
+							},
+							{
+								Group:        "",
+								Version:      "v1",
+								ResourceType: "configmaps",
+								Namespace:    TestConfigMapNamespace,
+								Names: []string{
+									TestConfigMapName3,
+								},
+							},
+							{
+								Group:        "",
+								Version:      "v1",
+								ResourceType: "secrets",
+								Namespace:    TestSecretNamespace,
+								Names: []string{
+									TestSecretName,
+								},
+							},
+							{
+								Group:        "",
+								Version:      "v1",
+								ResourceType: "configmaps",
+								Namespace:    TestConfigMapNamespace2,
+							},
+						},
+					},
+				}
+				By("Creating the SynkSource")
+				Expect(k8sClient1.Create(ctx, synkSource)).Should(Succeed())
+
+				By("Checking if the created SynkSource exists")
+				Eventually(func() bool {
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName2, Namespace: TestSynkSourceNamespace}, createdSynkSource2)
+					return err == nil
+				}, timeout, interval).Should(BeTrue())
+			})
+
+			It("Should create a Service account", func() {
+				By("Checking if the service account exists")
+				Eventually(func() bool {
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName2, Namespace: TestSynkSourceNamespace}, sa)
+					return err == nil
+				}, timeout, interval).Should(BeTrue())
+			})
+
+			It("Should create a Secret for the service account", func() {
+				By("Checking if the secret exists")
+				Eventually(func() int {
+					_ = k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName2, Namespace: TestSynkSourceNamespace}, secret)
+					return len(secret.ObjectMeta.Annotations)
+				}, timeout, interval).Should(Equal(2))
+
+				By("Checking if the type is correct")
+				Expect(secret.Type).Should(Equal(corev1.SecretTypeServiceAccountToken))
+
+				By("Checking if the service account is correctly linked to the secret")
+				Expect(secret.ObjectMeta.Annotations["kubernetes.io/service-account.name"]).Should(Equal(TestSynkSourceName2))
+
+				By("Checking if the secret contains the generated data")
+				Expect(len(secret.Data)).Should(Equal(3))
+			})
+
+			It("Should create Roles", func() {
+				By("Checking if the roles exist")
+				Eventually(func() bool {
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName2, Namespace: TestConfigMapNamespace}, role)
+					return err == nil
+				}, timeout, interval).Should(BeTrue())
+				Eventually(func() bool {
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName2, Namespace: TestConfigMapNamespace2}, role2)
+					return err == nil
+				}, timeout, interval).Should(BeTrue())
+
+				By("Checking if the amount of rules is correct")
+				Expect(len(role.Rules)).Should(Equal(2))
+
+				Expect(len(role2.Rules)).Should(Equal(1))
+
+				By("Checking if each rule has only one resourcetype")
+				Expect(len(role.Rules[0].Resources)).Should(Equal(1))
+				Expect(len(role.Rules[1].Resources)).Should(Equal(1))
+
+				Expect(len(role2.Rules[0].Resources)).Should(Equal(1))
+
+				By("Checking if the only verb rule is watch")
+				Expect(len(role.Rules[0].Verbs)).Should(Equal(1))
+				Expect(len(role.Rules[1].Verbs)).Should(Equal(1))
+				Expect(role.Rules[0].Verbs[0]).Should(Equal("watch"))
+				Expect(role.Rules[1].Verbs[0]).Should(Equal("watch"))
+
+				Expect(len(role2.Rules[0].Verbs)).Should(Equal(1))
+				Expect(role2.Rules[0].Verbs[0]).Should(Equal("watch"))
+
+				By("Checking if the amount of resourcenames is correct")
+				Expect(len(role.Rules[0].ResourceNames)).Should(Equal(3))
+				Expect(len(role.Rules[1].ResourceNames)).Should(Equal(1))
+
+				Expect(role2.Rules[0].ResourceNames).Should(BeEmpty())
+
+				By("Checking if the resourcenames are correct")
+				Expect(role.Rules[0].ResourceNames).Should(ConsistOf(TestConfigMapName, TestConfigMapName2, TestConfigMapName3))
+				Expect(role.Rules[1].ResourceNames).Should(ConsistOf(TestSecretName))
+			})
+
+			It("Should create Rolebindings", func() {
+				By("Checking if the rolebindings exist")
+				Eventually(func() bool {
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName2, Namespace: TestConfigMapNamespace}, roleBinding)
+					return err == nil
+				}, timeout, interval).Should(BeTrue())
+				Eventually(func() bool {
+					err := k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName2, Namespace: TestConfigMapNamespace2}, roleBinding2)
+					return err == nil
+				}, timeout, interval).Should(BeTrue())
+
+				By("Checking if there is only 1 subject")
+				Expect(len(roleBinding.Subjects)).Should(Equal(1))
+
+				Expect(len(roleBinding2.Subjects)).Should(Equal(1))
+
+				By("Checking if it is the right subject")
+				Expect(roleBinding.Subjects[0].Kind).Should(Equal("ServiceAccount"))
+				Expect(roleBinding.Subjects[0].Name).Should(Equal(TestSynkSourceName2))
+
+				Expect(roleBinding2.Subjects[0].Kind).Should(Equal("ServiceAccount"))
+				Expect(roleBinding2.Subjects[0].Name).Should(Equal(TestSynkSourceName2))
+
+				By("Checking if it has the correct roleref")
+				Expect(roleBinding.RoleRef.Kind).Should(Equal("Role"))
+				Expect(roleBinding.RoleRef.Name).Should(Equal(TestSynkSourceName2))
+				Expect(roleBinding.RoleRef.APIGroup).Should(Equal("rbac.authorization.k8s.io"))
+
+				Expect(roleBinding2.RoleRef.Kind).Should(Equal("Role"))
+				Expect(roleBinding2.RoleRef.Name).Should(Equal(TestSynkSourceName2))
+				Expect(roleBinding2.RoleRef.APIGroup).Should(Equal("rbac.authorization.k8s.io"))
+			})
+
+			It("Should add connection parameters to the SynkSource", func() {
+				By("Checking if the connection is not nil")
+				Eventually(func() *synkv1alpha1.Connection {
+					_ = k8sClient1.Get(ctx, types.NamespacedName{Name: TestSynkSourceName2, Namespace: TestSynkSourceNamespace}, createdSynkSource2)
+					return createdSynkSource2.Spec.Connection
+				}, timeout, interval).ShouldNot(BeNil())
+			})
+		})
+
 		Context("SynkSource update", func() {
 			It("Should update the synksource", func() {
 				By("Updating Synksource")
@@ -284,6 +451,8 @@ var _ = Describe("SynkSource controller", func() {
 			It("Should delete the SynkSource resource", func() {
 				By("Deleting the SynkSource")
 				Expect(k8sClient1.Delete(ctx, createdSynkSource)).Should(Succeed())
+
+				Expect(k8sClient1.Delete(ctx, createdSynkSource2)).Should(Succeed())
 
 				By("Checking if the SynkSource is deleted")
 				Eventually(func() bool {

@@ -181,6 +181,22 @@ var _ = BeforeSuite(func() {
 	}
 	Expect(k8sClient2.Create(ctx, ns)).Should(Succeed())
 
+	By("Creating test2 ns in cluster2")
+	ns = &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test2",
+		},
+	}
+	Expect(k8sClient2.Create(ctx, ns)).Should(Succeed())
+
+	By("Creating test3 ns in cluster2")
+	ns = &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test3",
+		},
+	}
+	Expect(k8sClient2.Create(ctx, ns)).Should(Succeed())
+
 	By("Creating test2 ns in cluster1")
 	ns = &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -218,6 +234,14 @@ var _ = AfterSuite(func() {
 
 	By("Deleting the namespace in cluster2")
 	Expect(k8sClient2.Get(ctx, types.NamespacedName{Name: "test"}, ns)).Should(Succeed())
+	Expect(k8sClient2.Delete(ctx, ns)).Should(Succeed())
+
+	By("Deleting the namespace in cluster2")
+	Expect(k8sClient2.Get(ctx, types.NamespacedName{Name: "test2"}, ns)).Should(Succeed())
+	Expect(k8sClient2.Delete(ctx, ns)).Should(Succeed())
+
+	By("Deleting the namespace in cluster2")
+	Expect(k8sClient2.Get(ctx, types.NamespacedName{Name: "test3"}, ns)).Should(Succeed())
 	Expect(k8sClient2.Delete(ctx, ns)).Should(Succeed())
 
 	By("Deleting the namespace in cluster1")
